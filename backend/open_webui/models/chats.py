@@ -40,6 +40,12 @@ class Chat(Base):
 
     meta = Column(JSON, server_default="{}")
     folder_id = Column(Text, nullable=True)
+    customUserId = Column(String, nullable=True)
+    pipe_meta = Column(JSON)
+    custom_metadata1 = Column(JSON)
+    custom_metadata2 = Column(JSON)
+    custom_metadata3 = Column(JSON)
+    custom_metadata4 = Column(JSON)
 
     __table_args__ = (
         # Performance indexes for common queries
@@ -53,6 +59,8 @@ class Chat(Base):
         Index("updated_at_user_id_idx", "updated_at", "user_id"),
         # WHERE folder_id = ... AND user_id = ...
         Index("folder_id_user_id_idx", "folder_id", "user_id"),
+        Index("user_id_idx", "user_id"),
+        Index("customUserId_idx", "customUserId"),
     )
 
 
@@ -61,6 +69,7 @@ class ChatModel(BaseModel):
 
     id: str
     user_id: str
+    customUserId:  Optional[str] = None
     title: str
     chat: dict
 
@@ -83,6 +92,16 @@ class ChatModel(BaseModel):
 class ChatForm(BaseModel):
     chat: dict
     folder_id: Optional[str] = None
+
+
+    # NEW: allow passing extras directly on the form (optional)
+    customUserId: Optional[str] = None
+    pipe_meta: Optional[dict] = None
+    custom_metadata1: Optional[dict] = None
+    custom_metadata2: Optional[dict] = None
+    custom_metadata3: Optional[dict] = None
+    custom_metadata4: Optional[dict] = None
+
 
 
 class ChatImportForm(ChatForm):
@@ -122,26 +141,54 @@ class ChatTitleIdResponse(BaseModel):
     created_at: int
 
 
+def _get_from_form_or_payload(form: ChatForm, key: str, default=None):
+    """
+    Prefer a top-level field on the form; otherwise fall back to form.chat[key].
+    """
+    v = getattr(form, key, None)
+    if v is not None:
+        return v
+    if isinstance(form.chat, dict):
+        return form.chat.get(key, default)
+    return default
+
+
 class ChatTable:
     def insert_new_chat(self, user_id: str, form_data: ChatForm) -> Optional[ChatModel]:
         with get_db() as db:
             id = str(uuid.uuid4())
-            chat = ChatModel(
-                **{
-                    "id": id,
-                    "user_id": user_id,
-                    "title": (
-                        form_data.chat["title"]
-                        if "title" in form_data.chat
-                        else "New Chat"
-                    ),
-                    "chat": form_data.chat,
-                    "folder_id": form_data.folder_id,
-                    "created_at": int(time.time()),
-                    "updated_at": int(time.time()),
-                }
-            )
+            now = int(time.time())
 
+            payload = {
+                "id": id,
+                "user_id": user_id,
+                "title": (
+                    form_data.chat["title"]
+                    if isinstance(form_data.chat, dict) and "title" in form_data.chat
+                    else "New Chat"
+                ),
+                "chat": form_data.chat,
+                "folder_id": form_data.folder_id,
+                "created_at": now,
+                "updated_at": now,
+            }
+
+            # Collect optional fields from form or embedded chat payload
+            optional_keys = [
+                "customUserId",
+                "pipe_meta",
+                "custom_metadata1",
+                "custom_metadata2",
+                "custom_metadata3",
+                "custom_metadata4",
+            ]
+
+            for key in optional_keys:
+                value = _get_from_form_or_payload(form_data, key)
+                if value is not None:
+                    payload[key] = value
+
+            chat = ChatModel(**payload)
             result = Chat(**chat.model_dump())
             db.add(result)
             db.commit()
@@ -189,15 +236,34 @@ class ChatTable:
         try:
             with get_db() as db:
                 chat_item = db.get(Chat, id)
+                if chat_item is None:
+                    return None
+
+                # Update corresponding top-level columns if provided inside `chat`
+                # (won't overwrite with None; only sets when key exists and is not None)
+                optional_top_level_keys = [
+                    "customUserId",
+                    "pipe_meta",
+                    "custom_metadata1",
+                    "custom_metadata2",
+                    "custom_metadata3",
+                    "custom_metadata4",
+                ]
+                for key in optional_top_level_keys:
+                    if isinstance(chat, dict) and key in chat and chat[key] is not None:
+                        setattr(chat_item, key, chat[key])
+
+                # Persist the chat JSON and core fields
                 chat_item.chat = chat
                 chat_item.title = chat["title"] if "title" in chat else "New Chat"
                 chat_item.updated_at = int(time.time())
+
                 db.commit()
                 db.refresh(chat_item)
-
                 return ChatModel.model_validate(chat_item)
         except Exception:
             return None
+
 
     def update_chat_title_by_id(self, id: str, title: str) -> Optional[ChatModel]:
         chat = self.get_chat_by_id(id)
@@ -226,7 +292,8 @@ class ChatTable:
             if tag_name.lower() == "none":
                 continue
 
-            self.add_chat_tag_by_id_and_user_id_and_tag_name(id, user.id, tag_name)
+            self.add_chat_tag_by_id_and_user_id_and_tag_name(
+                id, user.id, tag_name)
         return self.get_chat_by_id(id)
 
     def get_chat_title_by_id(self, id: str) -> Optional[str]:
@@ -290,7 +357,8 @@ class ChatTable:
         history = chat.get("history", {})
 
         if message_id in history.get("messages", {}):
-            status_history = history["messages"][message_id].get("statusHistory", [])
+            status_history = history["messages"][message_id].get(
+                "statusHistory", [])
             status_history.append(status)
             history["messages"][message_id]["statusHistory"] = status_history
 
@@ -337,7 +405,8 @@ class ChatTable:
             with get_db() as db:
                 chat = db.get(Chat, chat_id)
                 shared_chat = (
-                    db.query(Chat).filter_by(user_id=f"shared-{chat_id}").first()
+                    db.query(Chat).filter_by(
+                        user_id=f"shared-{chat_id}").first()
                 )
 
                 if shared_chat is None:
@@ -369,7 +438,8 @@ class ChatTable:
     def unarchive_all_chats_by_user_id(self, user_id: str) -> bool:
         try:
             with get_db() as db:
-                db.query(Chat).filter_by(user_id=user_id).update({"archived": False})
+                db.query(Chat).filter_by(
+                    user_id=user_id).update({"archived": False})
                 db.commit()
                 return True
         except Exception:
@@ -415,7 +485,8 @@ class ChatTable:
     def archive_all_chats_by_user_id(self, user_id: str) -> bool:
         try:
             with get_db() as db:
-                db.query(Chat).filter_by(user_id=user_id).update({"archived": True})
+                db.query(Chat).filter_by(
+                    user_id=user_id).update({"archived": True})
                 db.commit()
                 return True
         except Exception:
@@ -513,7 +584,8 @@ class ChatTable:
                 query = query.filter_by(folder_id=None)
 
             if not include_pinned:
-                query = query.filter(or_(Chat.pinned == False, Chat.pinned == None))
+                query = query.filter(
+                    or_(Chat.pinned == False, Chat.pinned == None))
 
             if not include_archived:
                 query = query.filter_by(archived=False)
@@ -727,7 +799,8 @@ class ChatTable:
                 sqlite_content_clause = text(sqlite_content_sql)
                 query = query.filter(
                     or_(
-                        Chat.title.ilike(bindparam("title_key")), sqlite_content_clause
+                        Chat.title.ilike(bindparam("title_key")
+                                         ), sqlite_content_clause
                     ).params(title_key=f"%{search_text}%", content_key=search_text)
                 )
 
@@ -824,8 +897,10 @@ class ChatTable:
         self, folder_id: str, user_id: str, skip: int = 0, limit: int = 60
     ) -> list[ChatModel]:
         with get_db() as db:
-            query = db.query(Chat).filter_by(folder_id=folder_id, user_id=user_id)
-            query = query.filter(or_(Chat.pinned == False, Chat.pinned == None))
+            query = db.query(Chat).filter_by(
+                folder_id=folder_id, user_id=user_id)
+            query = query.filter(
+                or_(Chat.pinned == False, Chat.pinned == None))
             query = query.filter_by(archived=False)
 
             query = query.order_by(Chat.updated_at.desc())
@@ -845,7 +920,8 @@ class ChatTable:
             query = db.query(Chat).filter(
                 Chat.folder_id.in_(folder_ids), Chat.user_id == user_id
             )
-            query = query.filter(or_(Chat.pinned == False, Chat.pinned == None))
+            query = query.filter(
+                or_(Chat.pinned == False, Chat.pinned == None))
             query = query.filter_by(archived=False)
 
             query = query.order_by(Chat.updated_at.desc())
@@ -1044,7 +1120,8 @@ class ChatTable:
     ) -> bool:
         try:
             with get_db() as db:
-                db.query(Chat).filter_by(user_id=user_id, folder_id=folder_id).delete()
+                db.query(Chat).filter_by(user_id=user_id,
+                                         folder_id=folder_id).delete()
                 db.commit()
 
                 return True
@@ -1055,9 +1132,11 @@ class ChatTable:
         try:
             with get_db() as db:
                 chats_by_user = db.query(Chat).filter_by(user_id=user_id).all()
-                shared_chat_ids = [f"shared-{chat.id}" for chat in chats_by_user]
+                shared_chat_ids = [
+                    f"shared-{chat.id}" for chat in chats_by_user]
 
-                db.query(Chat).filter(Chat.user_id.in_(shared_chat_ids)).delete()
+                db.query(Chat).filter(
+                    Chat.user_id.in_(shared_chat_ids)).delete()
                 db.commit()
 
                 return True

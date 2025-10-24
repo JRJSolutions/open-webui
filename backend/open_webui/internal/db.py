@@ -55,12 +55,14 @@ class JSONField(types.TypeDecorator):
 def handle_peewee_migration(DATABASE_URL):
     # db = None
     try:
+        print("Running handle_peewee_migration start")
         # Replace the postgresql:// with postgres:// to handle the peewee migration
         db = register_connection(DATABASE_URL.replace("postgresql://", "postgres://"))
         migrate_dir = OPEN_WEBUI_DIR / "internal" / "migrations"
         router = Router(db, logger=log, migrate_dir=migrate_dir)
         router.run()
         db.close()
+        print("handle_peewee_migration migration done")
 
     except Exception as e:
         log.error(f"Failed to initialize the database connection: {e}")
