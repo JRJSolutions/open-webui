@@ -69,7 +69,6 @@ class ChatModel(BaseModel):
 
     id: str
     user_id: str
-    customUserId:  Optional[str] = None
     title: str
     chat: dict
 
@@ -82,6 +81,15 @@ class ChatModel(BaseModel):
 
     meta: dict = {}
     folder_id: Optional[str] = None
+
+    # NEW: allow passing extras directly on the form (optional)
+    customUserId: Optional[str] = None
+    pipe_meta: Optional[dict] = None
+    custom_metadata1: Optional[dict] = None
+    custom_metadata2: Optional[dict] = None
+    custom_metadata3: Optional[dict] = None
+    custom_metadata4: Optional[dict] = None
+
 
 
 ####################
