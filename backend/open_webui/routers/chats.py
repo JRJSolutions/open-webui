@@ -447,6 +447,19 @@ async def get_chat_by_id(id: str, user=Depends(get_verified_user)):
         )
 
 
+@router.get("/custom/{id}", response_model=Optional[ChatResponse])
+async def get_chat_by_id_custom(id: str):
+    chat = Chats.get_chat_by_id(id)
+
+    if chat:
+        return ChatResponse(**chat.model_dump())
+
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND
+        )
+
+
 ############################
 # UpdateChatById
 ############################
@@ -457,6 +470,22 @@ async def update_chat_by_id(
     id: str, form_data: ChatForm, user=Depends(get_verified_user)
 ):
     chat = Chats.get_chat_by_id_and_user_id(id, user.id)
+    if chat:
+        updated_chat = {**chat.chat, **form_data.chat}
+        chat = Chats.update_chat_by_id(id, updated_chat)
+        return ChatResponse(**chat.model_dump())
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+
+
+@router.post("/custom/{id}", response_model=Optional[ChatResponse])
+async def update_chat_by_id_custom(
+    id: str, form_data: ChatForm
+):
+    chat = Chats.get_chat_by_id(id)
     if chat:
         updated_chat = {**chat.chat, **form_data.chat}
         chat = Chats.update_chat_by_id(id, updated_chat)
