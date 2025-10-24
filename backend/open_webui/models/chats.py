@@ -132,6 +132,13 @@ class ChatResponse(BaseModel):
     pinned: Optional[bool] = False
     meta: dict = {}
     folder_id: Optional[str] = None
+    customUserId: Optional[str] = None
+    pipe_meta: Optional[dict] = None
+    custom_metadata1: Optional[dict] = None
+    custom_metadata2: Optional[dict] = None
+    custom_metadata3: Optional[dict] = None
+    custom_metadata4: Optional[dict] = None
+
 
 
 class ChatTitleIdResponse(BaseModel):
