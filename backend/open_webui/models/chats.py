@@ -254,21 +254,31 @@ class ChatTable:
                 if chat_item is None:
                     return None
 
-                # Update corresponding top-level columns if provided inside `chat`
-                # (won't overwrite with None; only sets when key exists and is not None)
+                # Ensure we have a dict to work with
+                if not isinstance(chat, dict):
+                    return None
+
+                # Keys that map from chat JSON -> top-level columns on Chat
                 optional_top_level_keys = [
                     "customUserId",
                     "pipe_meta",
                     "custom_metadata1",
                     "custom_metadata2",
                     "custom_metadata3",
-                    "custom_metadata4",
+                    "custom_metadata4"
                 ]
-                for key in optional_top_level_keys:
-                    if isinstance(chat, dict) and key in chat and chat[key] is not None:
-                        setattr(chat_item, key, chat[key])
 
-                # Persist the chat JSON and core fields
+                # Copy over provided values (only when key exists AND value is not None)
+                for key in optional_top_level_keys:
+                     setattr(chat_item, key, chat.get(key))
+
+                # (Optional) de-duplicate those keys from the JSON after copying:
+                # Uncomment if you don't want them stored inside the chat JSON too.
+                # for key in optional_top_level_keys:
+                #     if key in chat and chat[key] is not None:
+                #         chat.pop(key, None)
+
+                # Persist the full chat JSON + core fields
                 chat_item.chat = chat
                 chat_item.title = chat["title"] if "title" in chat else "New Chat"
                 chat_item.updated_at = int(time.time())
@@ -278,6 +288,7 @@ class ChatTable:
                 return ChatModel.model_validate(chat_item)
         except Exception:
             return None
+
 
 
     def update_chat_title_by_id(self, id: str, title: str) -> Optional[ChatModel]:
