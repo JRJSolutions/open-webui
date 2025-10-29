@@ -11,6 +11,12 @@ import random
 import re
 from uuid import uuid4
 
+if os.getenv("DEBUGPY_OPENWEBUI") == "true":
+    import debugpy
+    debugpy.listen(("127.0.0.1", 5673))
+    # debugpy.wait_for_client()
+
+
 
 from contextlib import asynccontextmanager
 from urllib.parse import urlencode, parse_qs, urlparse

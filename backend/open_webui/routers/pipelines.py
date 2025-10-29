@@ -62,7 +62,6 @@ async def process_pipeline_inlet_filter(request, payload, user, models):
     model_id = payload["model"]
     sorted_filters = get_sorted_filters(model_id, models)
     model = models[model_id]
-
     if "pipeline" in model:
         sorted_filters.append(model)
 
@@ -74,6 +73,12 @@ async def process_pipeline_inlet_filter(request, payload, user, models):
                 urlIdx = int(urlIdx)
             except:
                 continue
+            url = request.app.state.config.OPENAI_API_BASE_URLS[urlIdx]
+            chat_id = payload.get("metadata", {}).get("chat_id")
+            if chat_id:
+                if 'pipe-' in url:
+                    payload["chat_id"] = chat_id
+                    continue
 
             url = request.app.state.config.OPENAI_API_BASE_URLS[urlIdx]
             key = request.app.state.config.OPENAI_API_KEYS[urlIdx]
@@ -127,6 +132,8 @@ async def process_pipeline_outlet_filter(request, payload, user, models):
                 urlIdx = int(urlIdx)
             except:
                 continue
+
+            continue
 
             url = request.app.state.config.OPENAI_API_BASE_URLS[urlIdx]
             key = request.app.state.config.OPENAI_API_KEYS[urlIdx]

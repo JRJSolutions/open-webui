@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "python",
+            "name": "openwebui",
+            "request": "attach",
+            "port": 5673,
+            "host": "127.0.0.1",
+            "justMyCode": false,
+            "pathMappings": [
+                {
+                  "localRoot": "${workspaceFolder}/backend",
+                  "remoteRoot": "."
+                }
+            ],
+        }
+    ]
+}
